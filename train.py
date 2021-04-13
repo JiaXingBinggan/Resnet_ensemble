@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 from config import Config
 from resnetforcifar import resnet34
 from torchvision.datasets import CIFAR100
-from .utils import DataPrefetcher, get_logger, AverageMeter, accuracy, load_train_data, CIFAR_SPLIT, BootStrap
+from utils import DataPrefetcher, get_logger, AverageMeter, accuracy, load_train_data, CIFAR_SPLIT, BootStrap
 
 import numpy as np
 
@@ -115,7 +115,7 @@ def train(train_loader, model, criterion, optimizer, scheduler, epoch, logger,
     iter_index = 1
 
     while inputs is not None:
-        inputs, labels = inputs.to(Config.device), labels.to(Config.device)
+        inputs, labels = inputs.to(Config.device), labels.to(Config.device).squeeze(1)
 
         outputs = model(inputs)
         loss = criterion(outputs, labels)
@@ -132,7 +132,8 @@ def train(train_loader, model, criterion, optimizer, scheduler, epoch, logger,
             optimizer.zero_grad()
 
         # measure accuracy and record loss
-        acc1 = accuracy(outputs, labels, topk=(1, ))
+        acc1 = accuracy(outputs, labels, topk=(1, ))[0]
+
         top1.update(acc1.item(), inputs.size(0))
         losses.update(loss.item(), inputs.size(0))
 
@@ -162,9 +163,9 @@ def validate(val_loader, model, args):
         end = time.time()
         for inputs, labels in val_loader:
             data_time.update(time.time() - end)
-            inputs, labels = inputs.to(Config.device), labels.to(Config.device)
+            inputs, labels = inputs.to(Config.device), labels.to(Config.device).squeeze(1)
             outputs = model(inputs)
-            acc1 = accuracy(outputs, labels, topk=(1, ))
+            acc1 = accuracy(outputs, labels, topk=(1, ))[0]
             top1.update(acc1.item(), inputs.size(0))
             batch_time.update(time.time() - end)
             end = time.time()
@@ -173,7 +174,30 @@ def validate(val_loader, model, args):
 
     return top1.avg, throughput
 
-def main(logger, args, train_loader, val_loader, test_loader):
+def test(test_loader, model, args):
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+    top1 = AverageMeter()
+
+    # switch to evaluate mode
+    model.eval()
+
+    with torch.no_grad():
+        end = time.time()
+        for inputs, labels in test_loader:
+            data_time.update(time.time() - end)
+            inputs, labels = inputs.to(Config.device), labels.to(Config.device)
+            outputs = model(inputs)
+            acc1 = accuracy(outputs, labels, topk=(1, ))[0]
+            top1.update(acc1.item(), inputs.size(0))
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+    throughput = 1.0 / (batch_time.avg / inputs.size(0))
+
+    return top1.avg, throughput
+
+def main(logger, args, train_loader, val_loader, test_loader, boostrap_iter):
     start_time = time.time()
 
     logger.info(f"creating model")
@@ -200,27 +224,11 @@ def main(logger, args, train_loader, val_loader, test_loader):
 
     model = nn.DataParallel(model)
 
-    if args.evaluate:
-        if not os.path.isfile(args.evaluate):
-            raise Exception(
-                f"{args.resume} is not a file, please check it again")
-        logger.info('start only evaluating')
-        logger.info(f"start resuming model from {args.evaluate}")
-        checkpoint = torch.load(args.evaluate,
-                                map_location=torch.device('cpu'))
-        model.load_state_dict(checkpoint['model_state_dict'])
-        acc1, throughput = validate(val_loader, model, args)
-        logger.info(
-            f"epoch {checkpoint['epoch']:0>3d}, top1 acc: {acc1:.2f}%, throughput: {throughput:.2f}sample/s"
-        )
-
-        return
-
     best_val_acc = 0.0
     start_epoch = 1
     # resume training
-    if os.path.exists(args.resume):
-        logger.info(f"start resuming model from {args.resume}")
+    if os.path.exists(args.resume + "latest." + str(boostrap_iter) + ".pth"):
+        logger.info(f"start resuming model from {args.resume + 'latest.' + str(boostrap_iter) + '.pth'}")
         checkpoint = torch.load(args.resume, map_location=torch.device('cpu'))
         start_epoch += checkpoint['epoch']
         best_val_acc = checkpoint['best_val_acc']
@@ -228,7 +236,8 @@ def main(logger, args, train_loader, val_loader, test_loader):
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         logger.info(
-            f"finish resuming model from {args.re0sume}, epoch {checkpoint['epoch']}, "
+            f"finish resuming model from {args.re0sume}, boostrap_iter {checkpoint['boostrap_iter']}, "
+            f"epoch {checkpoint['epoch']}, "
             f"loss: {checkpoint['loss']:3f}, best_val_acc: {checkpoint['best_val_acc']:.2f}%, lr: {checkpoint['lr']:.6f}, "
             f"top1_acc: {checkpoint['acc1']}%")
 
@@ -239,23 +248,29 @@ def main(logger, args, train_loader, val_loader, test_loader):
     for epoch in range(start_epoch, args.epochs + 1):
         acc1, losses = train(train_loader, model, criterion, optimizer,
                                    scheduler, epoch, logger, args)
+
         logger.info(
-            f"train: epoch {epoch:0>3d}, top1 acc: {acc1:.2f}%, losses: {losses:.2f}"
+            f"train: boostrap_iter {boostrap_iter:0>3d}, epoch {epoch:0>3d}, top1 acc: {acc1:.2f}%, losses: {losses:.2f}"
         )
 
         acc1, throughput = validate(val_loader, model, args)
         logger.info(
-            f"val: epoch {epoch:0>3d}, top1 acc: {acc1:.2f}%, throughput: {throughput:.2f}sample/s"
+            f"val: boostrap_iter {boostrap_iter:0>3d}, epoch {epoch:0>3d}, top1 acc: {acc1:.2f}%, throughput: {throughput:.2f}sample/s"
         )
         if acc1 > best_val_acc:
-            torch.save(model.module.state_dict(),
-                       os.path.join(args.checkpoints, "best.pth"))
+            torch.save({
+                           'boostrap_iter': boostrap_iter,
+                           'loss': losses,
+                           'model_state_dict': model.state_dict(),
+                       },
+                       os.path.join(args.checkpoints, "best" + str(boostrap_iter) + ".pth"))
             best_val_acc = acc1
 
         # remember best prec@1 and save checkpoint
 
         torch.save(
             {
+                'boostrap_iter': boostrap_iter,
                 'epoch': epoch,
                 'best_val_acc': best_val_acc,
                 'acc1': acc1,
@@ -264,9 +279,24 @@ def main(logger, args, train_loader, val_loader, test_loader):
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
-            }, os.path.join(args.checkpoints, 'latest.pth'))
+            }, os.path.join(args.checkpoints, 'latest' + str(boostrap_iter) + '.pth'))
 
-    logger.info(f"finish training, best val acc: {best_val_acc:.2f}%")
+    if not os.path.isfile(args.resume + "best" + str(boostrap_iter) + ".pth"):
+        raise Exception(
+            f"{args.resume + 'best.' + str(boostrap_iter) + '.pth'} is not a file, please check it again")
+    logger.info('start only evaluating')
+    logger.info(f"start resuming model from {args.evaluate}")
+    checkpoint = torch.load(args.resume + 'best' + str(boostrap_iter) + '.pth',
+                            map_location=torch.device('cpu'))
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+    best_test_acc1, throughput = test(test_loader, model, args)
+    logger.info(
+        f"Test: boostrap_iter {checkpoint['boostrap_iter']:0>3d}, "
+        f"top1 acc: {best_test_acc1:.2f}%, throughput: {throughput:.2f}sample/s"
+    )
+
+    logger.info(f"finish training, boostrap_iter {boostrap_iter:0>3d}, best test acc: {best_test_acc1:.2f}%")
     training_time = (time.time() - start_time) / 3600
     logger.info(
         f"finish training, total training time: {training_time:.2f} hours")
@@ -310,12 +340,12 @@ if __name__ == '__main__':
     for boostrap_iter in range(30):
         train_slice = boostrap.sampling()
         val_slice = list(set(list(range(no_split_train_img_np.shape[0]))).difference(set(train_slice))) # 获取验证集下标
-        
+
         split_train_img_np, split_train_target_np = \
-            no_split_train_target_np[train_slice], no_split_train_target_np[train_slice] # 采样后的训练集
+            no_split_train_img_np[train_slice], no_split_train_target_np[train_slice] # 采样后的训练集
 
         split_val_img_np, split_val_target_np = \
-            no_split_train_target_np[val_slice], no_split_train_target_np[val_slice]  # 采样后的验证集
+            no_split_train_img_np[val_slice], no_split_train_target_np[val_slice]  # 采样后的验证集
 
         train_dataset_init = {
             "data": split_train_img_np,
@@ -342,4 +372,4 @@ if __name__ == '__main__':
                               num_workers=args.num_workers,
                               pin_memory=True)
 
-        main(logger, args, train_loader, val_loader, test_loader)
+        main(logger, args, train_loader, val_loader, test_loader, boostrap_iter + 1)

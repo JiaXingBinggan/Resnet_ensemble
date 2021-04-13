@@ -128,4 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-data/
+datasets/
+.pytest_cache
+checkpoints/
+log/

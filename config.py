@@ -5,8 +5,6 @@ BASE_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(BASE_DIR)
 
-from public.path import CIFAR100_path
-
 import numpy as np
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -14,8 +12,8 @@ import torchvision.datasets as datasets
 
 class Config:
     log = "./log"  # Path to save log
-    checkpoint_path = "./checkpoints"  # Path to store model
-    resume = "./checkpoints/latest.pth"
+    checkpoint_path = "./checkpoints/"  # Path to store model
+    resume = "./checkpoints/"
     evaluate = None  # 测试模型，evaluate为模型地址
     dataset_path = './datasets'
     train_dataset_path = dataset_path + '/CIFAR100'
@@ -29,7 +27,7 @@ class Config:
     num_classes = 100
 
     milestones = [60, 120, 160]
-    epochs = 200
+    epochs = 120
     batch_size = 128
     accumulation_steps = 1
     lr = 0.1

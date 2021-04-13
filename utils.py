@@ -112,9 +112,9 @@ def accuracy(output, target, topk=(1, )):
 
 def load_train_data(data_root):
     data, targets = [], []
-    for file_name in os.listdir(data_root + '/cifar-100-python'):
+    for file_name in os.listdir(data_root + '/CIFAR100/cifar-100-python'):
         if file_name == 'train':
-            file_path = os.path.join(data_root + '/cifar-100-python', file_name)
+            file_path = os.path.join(data_root + '/CIFAR100/cifar-100-python', file_name)
             with open(file_path, 'rb') as f:
                 entry = pickle.load(f, encoding='latin1')
                 data.append(entry['data'])
@@ -123,13 +123,13 @@ def load_train_data(data_root):
                 else:
                     targets.extend(entry['fine_labels'])
 
-    return data, targets
+    return np.vstack(data), np.vstack(targets)
 
 
 class CIFAR_SPLIT(Dataset.Dataset):
     def __init__(self,
-                 data: list,
-                 targets: list,
+                 data,
+                 targets,
                  transform: Optional[Callable] = None,
                  target_transform: Optional[Callable] = None,
                  ):
@@ -140,8 +140,8 @@ class CIFAR_SPLIT(Dataset.Dataset):
 
         self.data = data
         self.targets = targets
-        self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
-        self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
+        self.data = self.data.reshape(-1, 3, 32, 32).transpose((0, 2, 3, 1))  # convert to HWC
+        # self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
 
     # 返回数据集大小
     def __len__(self) -> int:
