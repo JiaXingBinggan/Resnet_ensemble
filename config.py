@@ -23,20 +23,20 @@ class Config:
     split_nums = 30
 
     pretrained = False
-    seed = 2021
+    seed = 0
     num_classes = 100
 
-    milestones = [60, 120, 160]
-    epochs = 120
+    milestones = [30, 60, 90]
+    epochs = 90
     batch_size = 128
     accumulation_steps = 1
     lr = 0.1
     gamma = 0.2
     momentum = 0.9
-    weight_decay = 5e-4
-    num_workers = 4
+    weight_decay = 1e-4
+    num_workers = 8
     print_interval = 30
-    apex = True
+    apex = False
 
     train_transform = transforms.Compose([
         transforms.Pad(4, padding_mode='reflect'),

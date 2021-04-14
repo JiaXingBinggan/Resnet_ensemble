@@ -250,12 +250,20 @@ def main(logger, args, train_loader, val_loader, test_loader, boostrap_iter):
                                    scheduler, epoch, logger, args)
 
         logger.info(
-            f"train: boostrap_iter {boostrap_iter:0>3d}, epoch {epoch:0>3d}, top1 acc: {acc1:.2f}%, losses: {losses:.2f}"
+            f"train: boostrap_iter {boostrap_iter:0>3d}, epoch {epoch:0>3d}, "
+            f"top1 acc: {acc1:.2f}%, losses: {losses:.2f}"
         )
 
         acc1, throughput = validate(val_loader, model, args)
         logger.info(
-            f"val: boostrap_iter {boostrap_iter:0>3d}, epoch {epoch:0>3d}, top1 acc: {acc1:.2f}%, throughput: {throughput:.2f}sample/s"
+            f"val: boostrap_iter {boostrap_iter:0>3d}, epoch {epoch:0>3d}, "
+            f"top1 acc: {acc1:.2f}%, throughput: {throughput:.2f}sample/s"
+        )
+
+        test_acc1, test_throughput = test(test_loader, model, args)
+        logger.info(
+            f"test: boostrap_iter {boostrap_iter:0>3d}, epoch {epoch:0>3d}, "
+            f"top1 acc: {test_acc1:.2f}%, throughput: {test_throughput:.2f}sample/s"
         )
         if acc1 > best_val_acc:
             torch.save({
@@ -285,7 +293,7 @@ def main(logger, args, train_loader, val_loader, test_loader, boostrap_iter):
         raise Exception(
             f"{args.resume + 'best.' + str(boostrap_iter) + '.pth'} is not a file, please check it again")
     logger.info('start only evaluating')
-    logger.info(f"start resuming model from {args.evaluate}")
+    logger.info(f"start resuming model from {args.resume + 'best' + str(boostrap_iter) + '.pth'}")
     checkpoint = torch.load(args.resume + 'best' + str(boostrap_iter) + '.pth',
                             map_location=torch.device('cpu'))
 
