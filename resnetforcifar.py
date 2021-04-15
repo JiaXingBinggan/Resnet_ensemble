@@ -18,7 +18,7 @@ __all__ = [
 
 model_urls = {
     'resnet34':
-    './checkpoints/resnet34-cifar-acc78.84.pth'
+    './checkpoints/best.pth'
 }
 
 

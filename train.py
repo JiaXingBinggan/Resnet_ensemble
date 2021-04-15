@@ -60,6 +60,10 @@ def parse_args():
                         type=int,
                         default=Config.accumulation_steps,
                         help='gradient accumulation steps')
+    parser.add_argument('--fine_tuning',
+                        type=bool,
+                        default=Config.fine_tuning,
+                        help='use fine-tying model')
     parser.add_argument('--pretrained',
                         type=bool,
                         default=Config.pretrained,
@@ -103,6 +107,8 @@ def parse_args():
 
 def train(train_loader, model, criterion, optimizer, scheduler, epoch, logger,
           args):
+# def train(train_loader, model, criterion, optimizer, epoch, logger,
+#         args):
     top1 = AverageMeter()
     losses = AverageMeter()
 
@@ -210,6 +216,13 @@ def main(logger, args, train_loader, val_loader, test_loader, boostrap_iter):
         logger.info(f"{name},{param.requires_grad}")
 
     model = model.to(Config.device)
+
+    if args.fine_tuning:
+        print('train for the last layer, using transfer-learning')
+        for param in model.parameters():
+            param.requires_grad = False
+        model.fc = nn.Linear(512 * 1, 100).to(Config.device)
+
     criterion = nn.CrossEntropyLoss().to(Config.device)
     optimizer = torch.optim.SGD(model.parameters(),
                                 args.lr,
@@ -227,16 +240,16 @@ def main(logger, args, train_loader, val_loader, test_loader, boostrap_iter):
     best_val_acc = 0.0
     start_epoch = 1
     # resume training
-    if os.path.exists(args.resume + "latest." + str(boostrap_iter) + ".pth"):
-        logger.info(f"start resuming model from {args.resume + 'latest.' + str(boostrap_iter) + '.pth'}")
-        checkpoint = torch.load(args.resume, map_location=torch.device('cpu'))
+    if os.path.exists(args.resume + "latest" + str(boostrap_iter) + ".pth"):
+        logger.info(f"start resuming model from {args.resume + 'latest' + str(boostrap_iter) + '.pth'}")
+        checkpoint = torch.load(args.resume + 'latest' + str(boostrap_iter) + '.pth', map_location=torch.device('cpu'))
         start_epoch += checkpoint['epoch']
         best_val_acc = checkpoint['best_val_acc']
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        # scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         logger.info(
-            f"finish resuming model from {args.re0sume}, boostrap_iter {checkpoint['boostrap_iter']}, "
+            f"finish resuming model from {args.resume}, boostrap_iter {checkpoint['boostrap_iter']}, "
             f"epoch {checkpoint['epoch']}, "
             f"loss: {checkpoint['loss']:3f}, best_val_acc: {checkpoint['best_val_acc']:.2f}%, lr: {checkpoint['lr']:.6f}, "
             f"top1_acc: {checkpoint['acc1']}%")
@@ -246,9 +259,11 @@ def main(logger, args, train_loader, val_loader, test_loader, boostrap_iter):
 
     logger.info('start training')
     for epoch in range(start_epoch, args.epochs + 1):
+        # adjust_learning_rate(optimizer, epoch, args)
         acc1, losses = train(train_loader, model, criterion, optimizer,
                                    scheduler, epoch, logger, args)
-
+        # acc1, losses = train(train_loader, model, criterion, optimizer,
+        #                      epoch, logger, args)
         logger.info(
             f"train: boostrap_iter {boostrap_iter:0>3d}, epoch {epoch:0>3d}, "
             f"top1 acc: {acc1:.2f}%, losses: {losses:.2f}"
@@ -308,6 +323,12 @@ def main(logger, args, train_loader, val_loader, test_loader, boostrap_iter):
     training_time = (time.time() - start_time) / 3600
     logger.info(
         f"finish training, total training time: {training_time:.2f} hours")
+
+
+def adjust_learning_rate(optimizer, epoch, args):
+    lr = args.lr * (0.3 ** (epoch // 10))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
 
 
 if __name__ == '__main__':
