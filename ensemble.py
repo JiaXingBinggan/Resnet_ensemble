@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from config import Config
 from resnetforcifar import resnet34
 from torchvision.datasets import CIFAR100
-from utils import get_ensemble_logger, AverageMeter, ensemble_accuracy, CIFAR_SPLIT
+from utils import get_ensemble_logger, AverageMeter, ensemble_accuracy, CIFAR_SPLIT, load_train_data
 
 import numpy as np
 
@@ -56,7 +56,7 @@ def parse_args():
                         help='num of training epochs')
     parser.add_argument('--batch_size',
                         type=int,
-                        default=Config.batch_size,
+                        default=1024,
                         help='batch size')
     parser.add_argument('--accumulation_steps',
                         type=int,
@@ -110,7 +110,7 @@ def parse_args():
 
     return parser.parse_args()
 
-def test(test_loader, model, args):
+def generate(loader, model, args):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     top1 = AverageMeter()
@@ -121,7 +121,7 @@ def test(test_loader, model, args):
     with torch.no_grad():
         end = time.time()
         final_preds = torch.LongTensor().to(Config.device)
-        for inputs, labels in test_loader:
+        for inputs, labels in loader:
             data_time.update(time.time() - end)
             inputs, labels = inputs.to(Config.device), labels.to(Config.device)
             outputs = model(inputs)
@@ -176,15 +176,18 @@ if __name__ == '__main__':
 
     no_split_train_img_np, no_split_train_target_np = load_train_data(Config.dataset_path)
 
-    bootstrap_preds = torch.LongTensor().to(Config.device)
-    for boostrap_iter in range(1, 31):
-        if not os.path.isfile(args.resume + "/bootstrap_iter_slice_" + str(boostrap_iter) + ".csv"):
+    bootstrap_test_preds = torch.LongTensor().to(Config.device)
+    for boostrap_iter in range(1, Config.split_nums + 1):
+        if not os.path.isfile(args.record + "/bootstrap_iter_train_slice_" + str(boostrap_iter) + ".csv") or \
+                not os.path.isfile(args.record + "/bootstrap_iter_val_slice_" + str(boostrap_iter) + ".csv"):
             raise Exception(
-                f"{args.resume + 'bootstrap_iter_slice_' + str(boostrap_iter) + '.csv'} is not a file, please generate it first by training")
+                f"{args.record + 'bootstrap_iter_train/val_slice_' + str(boostrap_iter) + '.csv'} is not a file, "
+                f"please generate it first by training")
 
-        bootstrap_iter_slice = pd.read_csv(args.resume + "/bootstrap_iter_slice_" + str(boostrap_iter) + ".csv")
-        train_slice = bootstrap_iter_slice[['train']]
-        val_slice = bootstrap_iter_slice[['test']]
+        train_slice = pd.read_csv(args.record + "/bootstrap_iter_train_slice_"
+                                  + str(boostrap_iter) + ".csv").values.flatten().tolist()
+        val_slice = pd.read_csv(args.record + "/bootstrap_iter_val_slice_"
+                                + str(boostrap_iter) + ".csv").values.flatten().tolist()
 
         split_train_img_np, split_train_target_np = \
             no_split_train_img_np[train_slice], no_split_train_target_np[train_slice]  # 采样后的训练集
@@ -201,7 +204,6 @@ if __name__ == '__main__':
         train_dataset = CIFAR_SPLIT(**train_dataset_init)
         train_loader = DataLoader(train_dataset,
                                   batch_size=args.batch_size,
-                                  shuffle=True,
                                   num_workers=args.num_workers,
                                   pin_memory=True)
 
@@ -225,10 +227,16 @@ if __name__ == '__main__':
         checkpoint = torch.load(args.resume + 'best' + str(boostrap_iter) + '.pth',
                                 map_location=torch.device('cpu'))
         model.load_state_dict(checkpoint['model_state_dict'])
-        best_test_acc1, throughput, best_preds = test(test_loader, model, args)
+
+        best_train_acc1, train_throughput, train_best_preds = generate(train_loader, model, args)
+        best_val_acc1, val_throughput, val_best_preds = generate(val_loader, model, args)
+        best_test_acc1, test_throughput, test_best_preds = generate(test_loader, model, args)
+        
         logger.info(
             f"Test: boostrap_iter {checkpoint['boostrap_iter']:0>3d}, "
-            f"top1 acc: {best_test_acc1:.2f}%, throughput: {throughput:.2f}sample/s"
+            f"top1 train acc: {best_train_acc1:.2f}%, train throughput: {train_throughput:.2f}sample/s, "
+            f"top1 val acc: {best_val_acc1:.2f}%, val throughput: {val_throughput:.2f}sample/s, "
+            f"top1 testbootstrap_test_preds = torch.LongTensor().to(Config.device) acc: {best_test_acc1:.2f}%, test throughput: {test_throughput:.2f}sample/s"
         )
 
         logger.info(f"finish training, boostrap_iter {boostrap_iter:0>3d}, best test acc: {best_test_acc1:.2f}%")
@@ -236,8 +244,24 @@ if __name__ == '__main__':
         if not os.path.exists(args.record):
             os.makedirs(args.record)
 
-        boostrap_iter_record = pd.DataFrame(data=best_preds.cpu().numpy(), columns=['test_labels'])
-        boostrap_iter_record.to_csv(args.record + '/bootstrap_iter_' + str(boostrap_iter) + '.csv')
+        boostrap_iter_train_record_dict = {'train_labels': train_best_preds.cpu().numpy().flatten(),
+                                           'real_labels': split_train_target_np.flatten()}
 
-        bootstrap_preds = torch.cat([bootstrap_preds, best_preds], dim=-1)
-    print(bootstrap_preds)
+        boostrap_iter_train_record = pd.DataFrame(data=boostrap_iter_train_record_dict)
+        boostrap_iter_train_record.to_csv(args.record + '/bootstrap_iter_train_' +
+                                          str(boostrap_iter) + '_labels.csv', index=None)
+
+        boostrap_iter_val_record_dict = {'val_labels': val_best_preds.cpu().numpy().flatten(),
+                                           'real_labels': split_val_target_np.flatten()}
+
+        boostrap_iter_val_record = pd.DataFrame(data=boostrap_iter_val_record_dict)
+        boostrap_iter_val_record.to_csv(args.record + '/bootstrap_iter_val_' +
+                                          str(boostrap_iter) + '_labels.csv', index=None)
+
+        bootstrap_test_preds = torch.cat([bootstrap_test_preds, test_best_preds], dim=-1)
+
+    boostrap_iter_test_record = pd.DataFrame(data=bootstrap_test_preds.cpu().numpy())
+    boostrap_iter_test_record.to_csv(args.record + '/bootstrap_iter_test_labels.csv', index=None)
+
+
+

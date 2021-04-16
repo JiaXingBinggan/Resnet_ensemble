@@ -23,8 +23,8 @@ class Config:
 
     split_nums = 30
 
-    fine_tuning = True
-    pretrained = True
+    fine_tuning = False
+    pretrained = False
     seed = 0
     num_classes = 100
 
@@ -40,20 +40,38 @@ class Config:
     print_interval = 30
     apex = True
 
+    # train_transform = transforms.Compose([
+    #     transforms.Pad(4, padding_mode='reflect'),
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.RandomCrop(32),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(
+    #         np.array([125.3, 123.0, 113.9]) / 255.0,
+    #         np.array([63.0, 62.1, 66.7]) / 255.0),
+    # ])
+    # test_transform = transforms.Compose([
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(
+    #         np.array([125.3, 123.0, 113.9]) / 255.0,
+    #         np.array([63.0, 62.1, 66.7]) / 255.0),
+    # ])
+
     train_transform = transforms.Compose([
-        transforms.Pad(4, padding_mode='reflect'),
+        # transforms.Pad(4, padding_mode='reflect'),
         transforms.RandomHorizontalFlip(),
         transforms.RandomCrop(32),
         transforms.ToTensor(),
         transforms.Normalize(
-            np.array([125.3, 123.0, 113.9]) / 255.0,
-            np.array([63.0, 62.1, 66.7]) / 255.0),
+            np.array([0.485, 0.456, 0.406]),
+            np.array([0.229, 0.224, 0.225])),
     ])
     test_transform = transforms.Compose([
+        transforms.Resize(64),
+        transforms.CenterCrop(48),
         transforms.ToTensor(),
         transforms.Normalize(
-            np.array([125.3, 123.0, 113.9]) / 255.0,
-            np.array([63.0, 62.1, 66.7]) / 255.0),
+            np.array([0.485, 0.456, 0.406]),
+            np.array([0.229, 0.224, 0.225])),
     ])
     train_dataset_init = {
         "root": train_dataset_path,

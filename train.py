@@ -127,7 +127,6 @@ def train(train_loader, model, criterion, optimizer, scheduler, epoch, logger,
 
     while inputs is not None:
         inputs, labels = inputs.to(Config.device), labels.to(Config.device).squeeze(1)
-
         outputs = model(inputs)
         loss = criterion(outputs, labels)
         loss = loss / args.accumulation_steps
@@ -371,13 +370,19 @@ if __name__ == '__main__':
     no_split_train_img_np, no_split_train_target_np = load_train_data(Config.dataset_path)
 
     boostrap = BootStrap(no_split_train_img_np.shape[0]) # 初始化Bootstrap采样器
-    for boostrap_iter in range(30):
+    for boostrap_iter in range(Config.split_nums):
         train_slice = boostrap.sampling()
         val_slice = list(set(list(range(no_split_train_img_np.shape[0]))).difference(set(train_slice))) # 获取验证集下标
 
-        boostrap_iter_slices = {'train': train_slice, 'val': val_slice}
-        boostrap_iter_slice_df = pd.DataFrame(data=boostrap_iter_slices)
-        boostrap_iter_slice_df.to_csv(args.record + '/bootstrap_iter_slice_' + str(boostrap_iter) + '.csv')
+        boostrap_iter_train_slice = train_slice
+        boostrap_iter_train_slice_df = pd.DataFrame(data=boostrap_iter_train_slice)
+        boostrap_iter_train_slice_df.to_csv(args.record + '/bootstrap_iter_train_slice_'
+                                      + str(boostrap_iter + 1) + '.csv', index=None)
+
+        boostrap_iter_val_slice = val_slice
+        boostrap_iter_val_slice_df = pd.DataFrame(data=boostrap_iter_val_slice)
+        boostrap_iter_val_slice_df.to_csv(args.record + '/bootstrap_iter_val_slice_'
+                                            + str(boostrap_iter + 1) + '.csv', index=None)
 
         split_train_img_np, split_train_target_np = \
             no_split_train_img_np[train_slice], no_split_train_target_np[train_slice] # 采样后的训练集
