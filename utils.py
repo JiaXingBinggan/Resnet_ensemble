@@ -221,8 +221,8 @@ class BootStrap(object):
         self.n_samples = n_samples
 
     def sampling(self):
-        _slice = []
-        while len(_slice) < self.n_samples:
-            p = random.randrange(0, self.n_samples)
-            _slice.append(p)
+        # _slice = []
+        # while len(_slice) < self.n_samples:
+        _slice = np.random.choice(self.n_samples, self.n_samples, replace=True)
+            # _slice.append(p)
         return _slice
