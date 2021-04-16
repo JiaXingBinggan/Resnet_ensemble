@@ -11,6 +11,7 @@ import torchvision.datasets as datasets
 
 
 class Config:
+    record = "./record"
     log = "./log"  # Path to save log
     checkpoint_path = "./checkpoints/"  # Path to store model
     resume = "./checkpoints/"

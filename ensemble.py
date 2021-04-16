@@ -4,6 +4,7 @@ import argparse
 import random
 import time
 import warnings
+import pandas as pd
 
 BASE_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,7 +23,7 @@ from torch.utils.data import DataLoader
 from config import Config
 from resnetforcifar import resnet34
 from torchvision.datasets import CIFAR100
-from utils import get_ensemble_logger, AverageMeter, accuracy
+from utils import get_ensemble_logger, AverageMeter, ensemble_accuracy
 
 import numpy as np
 
@@ -85,6 +86,10 @@ def parse_args():
                         type=str,
                         default=Config.checkpoint_path,
                         help='path for saving trained models')
+    parser.add_argument('--record',
+                        type=str,
+                        default=Config.record,
+                        help='path for saving trained models')
     parser.add_argument('--log',
                         type=str,
                         default=Config.log,
@@ -115,18 +120,20 @@ def test(test_loader, model, args):
 
     with torch.no_grad():
         end = time.time()
+        final_preds = torch.LongTensor().to(Config.device)
         for inputs, labels in test_loader:
             data_time.update(time.time() - end)
             inputs, labels = inputs.to(Config.device), labels.to(Config.device)
             outputs = model(inputs)
-            acc1 = accuracy(outputs, labels, topk=(1,))[0]
-            top1.update(acc1.item(), inputs.size(0))
+            acc1, preds = ensemble_accuracy(outputs, labels, topk=(1,))
+            top1.update(acc1[0].item(), inputs.size(0))
             batch_time.update(time.time() - end)
             end = time.time()
+            final_preds = torch.cat([final_preds, preds], dim=-1)
 
     throughput = 1.0 / (batch_time.avg / inputs.size(0))
 
-    return top1.avg, throughput
+    return top1.avg, throughput, final_preds.view(-1, 1)
 
 
 if __name__ == '__main__':
@@ -168,7 +175,8 @@ if __name__ == '__main__':
 
     model = nn.DataParallel(model)
 
-    for boostrap_iter in range(1, 31):
+    bootstrap_preds = torch.LongTensor().to(Config.device)
+    for boostrap_iter in range(1, 3):
         if not os.path.isfile(args.resume + "best" + str(boostrap_iter) + ".pth"):
             raise Exception(
                 f"{args.resume + 'best.' + str(boostrap_iter) + '.pth'} is not a file, please check it again")
@@ -177,10 +185,19 @@ if __name__ == '__main__':
         checkpoint = torch.load(args.resume + 'best' + str(boostrap_iter) + '.pth',
                                 map_location=torch.device('cpu'))
         model.load_state_dict(checkpoint['model_state_dict'])
-        best_test_acc1, throughput = test(test_loader, model, args)
+        best_test_acc1, throughput, best_preds = test(test_loader, model, args)
         logger.info(
             f"Test: boostrap_iter {checkpoint['boostrap_iter']:0>3d}, "
             f"top1 acc: {best_test_acc1:.2f}%, throughput: {throughput:.2f}sample/s"
         )
 
         logger.info(f"finish training, boostrap_iter {boostrap_iter:0>3d}, best test acc: {best_test_acc1:.2f}%")
+
+        if not os.path.exists(args.record):
+            os.makedirs(args.record)
+
+        boostrap_iter_record = pd.DataFrame(data=best_preds.cpu().numpy(), columns=['test_labels'])
+        boostrap_iter_record.to_csv(args.record + '/bootstrap_iter_' + str(boostrap_iter) + '.csv')
+
+        bootstrap_preds = torch.cat([bootstrap_preds, best_preds], dim=-1)
+    print(bootstrap_preds)
