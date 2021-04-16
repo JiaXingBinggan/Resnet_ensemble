@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from config import Config
 from resnetforcifar import resnet34
 from torchvision.datasets import CIFAR100
-from utils import get_ensemble_logger, AverageMeter, ensemble_accuracy
+from utils import get_ensemble_logger, AverageMeter, ensemble_accuracy, CIFAR_SPLIT
 
 import numpy as np
 
@@ -172,11 +172,51 @@ if __name__ == '__main__':
         logger.info(f"{name},{param.requires_grad}")
 
     model = model.to(Config.device)
-
     model = nn.DataParallel(model)
 
+    no_split_train_img_np, no_split_train_target_np = load_train_data(Config.dataset_path)
+
     bootstrap_preds = torch.LongTensor().to(Config.device)
-    for boostrap_iter in range(1, 3):
+    for boostrap_iter in range(1, 31):
+        if not os.path.isfile(args.resume + "/bootstrap_iter_slice_" + str(boostrap_iter) + ".csv"):
+            raise Exception(
+                f"{args.resume + 'bootstrap_iter_slice_' + str(boostrap_iter) + '.csv'} is not a file, please generate it first by training")
+
+        bootstrap_iter_slice = pd.read_csv(args.resume + "/bootstrap_iter_slice_" + str(boostrap_iter) + ".csv")
+        train_slice = bootstrap_iter_slice[['train']]
+        val_slice = bootstrap_iter_slice[['test']]
+
+        split_train_img_np, split_train_target_np = \
+            no_split_train_img_np[train_slice], no_split_train_target_np[train_slice]  # 采样后的训练集
+
+        split_val_img_np, split_val_target_np = \
+            no_split_train_img_np[val_slice], no_split_train_target_np[val_slice]  # 采样后的验证集
+
+        train_dataset_init = {
+            "data": split_train_img_np,
+            "targets": split_train_target_np,
+            "transform": Config.train_transform
+        }
+
+        train_dataset = CIFAR_SPLIT(**train_dataset_init)
+        train_loader = DataLoader(train_dataset,
+                                  batch_size=args.batch_size,
+                                  shuffle=True,
+                                  num_workers=args.num_workers,
+                                  pin_memory=True)
+
+        val_dataset_init = {
+            "data": split_val_img_np,
+            "targets": split_val_target_np,
+            "transform": Config.test_transform
+        }
+
+        val_dataset = CIFAR_SPLIT(**val_dataset_init)
+        val_loader = DataLoader(val_dataset,
+                                batch_size=args.batch_size,
+                                num_workers=args.num_workers,
+                                pin_memory=True)
+
         if not os.path.isfile(args.resume + "best" + str(boostrap_iter) + ".pth"):
             raise Exception(
                 f"{args.resume + 'best.' + str(boostrap_iter) + '.pth'} is not a file, please check it again")

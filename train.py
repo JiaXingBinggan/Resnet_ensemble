@@ -25,6 +25,7 @@ from torchvision.datasets import CIFAR100
 from utils import DataPrefetcher, get_logger, AverageMeter, accuracy, load_train_data, CIFAR_SPLIT, BootStrap
 
 import numpy as np
+import pandas as pd
 
 def parse_args():
     parser = argparse.ArgumentParser(description='PyTorch CIFAR100 Training')
@@ -83,6 +84,10 @@ def parse_args():
     parser.add_argument('--checkpoints',
                         type=str,
                         default=Config.checkpoint_path,
+                        help='path for saving trained models')
+    parser.add_argument('--record',
+                        type=str,
+                        default=Config.record,
                         help='path for saving trained models')
     parser.add_argument('--log',
                         type=str,
@@ -369,6 +374,10 @@ if __name__ == '__main__':
     for boostrap_iter in range(30):
         train_slice = boostrap.sampling()
         val_slice = list(set(list(range(no_split_train_img_np.shape[0]))).difference(set(train_slice))) # 获取验证集下标
+
+        boostrap_iter_slices = {'train': train_slice, 'val': val_slice}
+        boostrap_iter_slice_df = pd.DataFrame(data=boostrap_iter_slices)
+        boostrap_iter_slice_df.to_csv(args.record + '/bootstrap_iter_slice_' + str(boostrap_iter) + '.csv')
 
         split_train_img_np, split_train_target_np = \
             no_split_train_img_np[train_slice], no_split_train_target_np[train_slice] # 采样后的训练集
