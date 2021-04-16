@@ -9,7 +9,7 @@ import numpy as np
 '''
 
 # 随机产生我们的数据集
-x = np.random.randint(-10, 10, 10)  # 前两个参数表示范围，第三个参数表示个数
+x = np.random.randint(-10, 10, 10)  # 前两个参数表示范围，第 三个参数表示个数
 index = [i for i in range(len(x))]   # 数据集的下标
 train_set = []  # 训练集
 train_index = []  # 用于记录训练集各个元素的下标
