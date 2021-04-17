@@ -370,7 +370,7 @@ if __name__ == '__main__':
     no_split_train_img_np, no_split_train_target_np = load_train_data(Config.dataset_path)
 
     boostrap = BootStrap(no_split_train_img_np.shape[0] * 2) # 初始化Bootstrap采样器
-    for boostrap_iter in range(Config.split_nums):
+    for boostrap_iter in range(3, Config.split_nums):
         train_slice = list(set(boostrap.sampling()))
         val_slice = list(set(list(range(no_split_train_img_np.shape[0]))).difference(set(train_slice))) # 获取验证集下标
 

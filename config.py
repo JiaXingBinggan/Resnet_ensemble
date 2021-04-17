@@ -28,8 +28,8 @@ class Config:
     seed = 0
     num_classes = 100
 
-    milestones = [15, 45, 75] # [30, 60, 90]
-    epochs = 90 # 120
+    milestones = [30, 60, 90] # [30, 60, 90]
+    epochs = 100 # 120
     batch_size = 64
     accumulation_steps = 1
     lr = 0.1
