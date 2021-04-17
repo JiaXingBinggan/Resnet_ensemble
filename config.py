@@ -28,14 +28,14 @@ class Config:
     seed = 0
     num_classes = 100
 
-    milestones = [60, 120, 160]
-    epochs = 200
-    batch_size = 128
+    milestones = [15, 45, 75] # [30, 60, 90]
+    epochs = 90 # 120
+    batch_size = 64
     accumulation_steps = 1
     lr = 0.1
     gamma = 0.2
     momentum = 0.9
-    weight_decay = 1e-4
+    weight_decay = 5e-4
     num_workers = 8
     print_interval = 30
     apex = True
