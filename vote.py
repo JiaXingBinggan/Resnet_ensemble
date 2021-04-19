@@ -162,8 +162,8 @@ if __name__ == '__main__':
     boostrap_iter_test_labels = pd.read_csv(args.record + '/bootstrap_iter_test_labels.csv')
 
     boostrap_iter_test_labels.mode(axis=1).to_csv(args.record + '/test.csv', index=None)
-    origin_vote_preds = np.array(list(map(lambda x: sorted(x)[len(x) // 2],
-                                                    boostrap_iter_test_labels.values)))
+    origin_vote_preds = np.array(list(map(lambda x: sorted(x)[len(x) // 2], boostrap_iter_test_labels.values)))
+    # 找30个基分类器对各个样本预测结果的众数
 
     vote_preds = torch.LongTensor(origin_vote_preds.reshape(-1, 1))
     vote_targets = torch.LongTensor(test_target_np)

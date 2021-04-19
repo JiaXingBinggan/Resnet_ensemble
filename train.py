@@ -112,8 +112,6 @@ def parse_args():
 
 def train(train_loader, model, criterion, optimizer, scheduler, epoch, logger,
           args):
-# def train(train_loader, model, criterion, optimizer, epoch, logger,
-#         args):
     top1 = AverageMeter()
     losses = AverageMeter()
 
@@ -251,7 +249,7 @@ def main(logger, args, train_loader, val_loader, test_loader, boostrap_iter):
         best_val_acc = checkpoint['best_val_acc']
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        # scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         logger.info(
             f"finish resuming model from {args.resume}, boostrap_iter {checkpoint['boostrap_iter']}, "
             f"epoch {checkpoint['epoch']}, "
@@ -263,11 +261,9 @@ def main(logger, args, train_loader, val_loader, test_loader, boostrap_iter):
 
     logger.info('start training')
     for epoch in range(start_epoch, args.epochs + 1):
-        # adjust_learning_rate(optimizer, epoch, args)
         acc1, losses = train(train_loader, model, criterion, optimizer,
                                    scheduler, epoch, logger, args)
-        # acc1, losses = train(train_loader, model, criterion, optimizer,
-        #                      epoch, logger, args)
+
         logger.info(
             f"train: boostrap_iter {boostrap_iter:0>3d}, epoch {epoch:0>3d}, "
             f"top1 acc: {acc1:.2f}%, losses: {losses:.2f}"
@@ -371,7 +367,7 @@ if __name__ == '__main__':
 
     boostrap = BootStrap(no_split_train_img_np.shape[0] * 2) # 初始化Bootstrap采样器
     for boostrap_iter in range(3, Config.split_nums):
-        train_slice = list(set(boostrap.sampling()))
+        train_slice = list(set(boostrap.sampling())) # bootstrap采样
         val_slice = list(set(list(range(no_split_train_img_np.shape[0]))).difference(set(train_slice))) # 获取验证集下标
 
         boostrap_iter_train_slice = train_slice
@@ -415,4 +411,4 @@ if __name__ == '__main__':
                               num_workers=args.num_workers,
                               pin_memory=True)
 
-        main(logger, args, train_loader, val_loader, test_loader, boostrap_iter + 1)
+        main(logger, args, train_loader, val_loader, test_loader, boostrap_iter + 1) # 主运行函数

@@ -164,26 +164,26 @@ if __name__ == '__main__':
     cudnn.enabled = True
 
     # dataset and dataloader
-    test_dataset = CIFAR100(**Config.test_dataset_init)
+    test_dataset = CIFAR100(**Config.test_dataset_init) # 读取测试集数据
     test_img_np, test_target_np = load_test_data(Config.dataset_path)
 
     bootstrap_test_acc1s = pd.read_csv(args.record +
                                             '/bootstrap_iter_test_acc1.csv').values[0]
-    max_acc1 = max(bootstrap_test_acc1s)
+    max_acc1 = max(bootstrap_test_acc1s) # 获取最优基分类器
     print('max acc1', max_acc1)
-    max_acc1_index = list(bootstrap_test_acc1s).index(max_acc1) # from 0
+    max_acc1_index = list(bootstrap_test_acc1s).index(max_acc1) # 找到最优基分类器的下标，from 0
 
     boostrap_iter_test_labels = pd.read_csv(args.record + '/bootstrap_iter_test_labels.csv')
-    max_acc1_preds = pd.read_csv(args.record + '/vote_preds.csv', dtype=int)
+    max_acc1_preds = pd.read_csv(args.record + '/vote_preds.csv', dtype=int) # 从投票集成的结果中读取标签
 
-    ensemble_n = Config.split_nums #
+    ensemble_n = Config.split_nums # 需要集成的数量
     ensemble_n_indexs = list(range(Config.split_nums))
     ensemble_n_len = len(ensemble_n_indexs)
     ensemble_n_test_labels = boostrap_iter_test_labels.iloc[:, ensemble_n_indexs]
     ensemble_n_test_labels.columns = list(range(ensemble_n_len))
 
-    iter_ensemble_n = 15 #
-    drop_ensemble_n = 2 #
+    iter_ensemble_n = 15 # 每次参与投票集成的基分类器数量
+    drop_ensemble_n = 2 # 每次集成后去掉的个数，去掉相似度最高的drop_ensemble_n个基分类器
 
     current_acc1 = max_acc1
     while current_acc1 >= max_acc1:
@@ -191,14 +191,15 @@ if __name__ == '__main__':
         pearsonr_x_ys = []
         for i in range(ensemble_n_len):
             # pearsonr_x_ys.append([i, pdist([max_acc1_preds.values.flatten(),
-            #                                   ensemble_n_test_labels.iloc[:, i].values], 'cosine')]) #
+            #                                   ensemble_n_test_labels.iloc[:, i].values], 'cosine')]) # 余弦相似度
             pearsonr_x_ys.append([i, pearsonr(max_acc1_preds.values.flatten(),
-                                            ensemble_n_test_labels.iloc[:, i].values)[0]]) #
+                                            ensemble_n_test_labels.iloc[:, i].values)[0]]) # 皮尔逊相关系数
 
-        sort_pearsonr_x_ys = np.array(sorted(pearsonr_x_ys, key=lambda x: x[1])).astype(int)
-        max_diff_index = list(sort_pearsonr_x_ys[:iter_ensemble_n, 0])
-        all_diff_index = list(sort_pearsonr_x_ys[:, 0])
+        sort_pearsonr_x_ys = np.array(sorted(pearsonr_x_ys, key=lambda x: x[1])).astype(int) # 排序
+        max_diff_index = list(sort_pearsonr_x_ys[:iter_ensemble_n, 0]) # 找到相似度最小的iter_ensemble_n个基分类器
+        all_diff_index = list(sort_pearsonr_x_ys[:, 0]) # 排序后的ensemble_n个基分类器
 
+        # 将相似度最小的iter_ensemble_n个基分类器和max_acc1_preds（O）进行投票集成
         merges = pd.concat([max_acc1_preds, ensemble_n_test_labels.iloc[:, max_diff_index]], axis=1)
         merge_votes = np.array(list(map(lambda x: np.argmax(np.bincount(x)), merges.values)))
 
@@ -210,13 +211,13 @@ if __name__ == '__main__':
             break
 
         print('ensemble acc1', acc1[0].item())
-
         max_acc1_preds = pd.DataFrame(data=merge_votes)
         max_acc1_preds.to_csv(args.record + '/ensemble_preds.csv', index=None)
 
         current_acc1 = acc1[0].item()
+
+        # 去掉相似度最小的iter_ensemble_n个基分类器
         ensemble_n_test_labels = ensemble_n_test_labels.drop(all_diff_index[:drop_ensemble_n], axis=1)
         ensemble_n_len -= drop_ensemble_n
         ensemble_n_test_labels.columns = list(range(ensemble_n_len))
-
 
