@@ -146,6 +146,7 @@ def ensemble_accuracy(output, target, topk=(1, )):
         _, pred = output.topk(maxk, 1, True, True)
 
         pred = pred.t()
+
         correct = pred.eq(target.view(1, -1).expand_as(pred))
 
         res = []
@@ -160,6 +161,21 @@ def load_train_data(data_root):
     data, targets = [], []
     for file_name in os.listdir(data_root + '/CIFAR100/cifar-100-python'):
         if file_name == 'train':
+            file_path = os.path.join(data_root + '/CIFAR100/cifar-100-python', file_name)
+            with open(file_path, 'rb') as f:
+                entry = pickle.load(f, encoding='latin1')
+                data.append(entry['data'])
+                if 'labels' in entry:
+                    targets.extend(entry['labels'])
+                else:
+                    targets.extend(entry['fine_labels'])
+
+    return np.vstack(data), np.vstack(targets)
+
+def load_test_data(data_root):
+    data, targets = [], []
+    for file_name in os.listdir(data_root + '/CIFAR100/cifar-100-python'):
+        if file_name == 'test':
             file_path = os.path.join(data_root + '/CIFAR100/cifar-100-python', file_name)
             with open(file_path, 'rb') as f:
                 entry = pickle.load(f, encoding='latin1')

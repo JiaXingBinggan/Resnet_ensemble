@@ -177,6 +177,7 @@ if __name__ == '__main__':
     no_split_train_img_np, no_split_train_target_np = load_train_data(Config.dataset_path)
 
     bootstrap_test_preds = torch.LongTensor().to(Config.device)
+    bootstrap_test_acc1_dicts = {}
     for boostrap_iter in range(1, Config.split_nums + 1):
         if not os.path.isfile(args.record + "/bootstrap_iter_train_slice_" + str(boostrap_iter) + ".csv") or \
                 not os.path.isfile(args.record + "/bootstrap_iter_val_slice_" + str(boostrap_iter) + ".csv"):
@@ -231,6 +232,8 @@ if __name__ == '__main__':
         best_train_acc1, train_throughput, train_best_preds = generate(train_loader, model, args)
         best_val_acc1, val_throughput, val_best_preds = generate(val_loader, model, args)
         best_test_acc1, test_throughput, test_best_preds = generate(test_loader, model, args)
+
+        bootstrap_test_acc1_dicts.setdefault(boostrap_iter, [best_test_acc1])
         
         logger.info(
             f"Test: boostrap_iter {checkpoint['boostrap_iter']:0>3d}, "
@@ -244,21 +247,28 @@ if __name__ == '__main__':
         if not os.path.exists(args.record):
             os.makedirs(args.record)
 
-        boostrap_iter_train_record_dict = {'train_labels': train_best_preds.cpu().numpy().flatten(),
-                                           'real_labels': split_train_target_np.flatten()}
+        boostrap_iter_train_record_dict = {'train_indexs': train_slice,
+                                           'train_labels': train_best_preds.cpu().numpy().flatten(),
+                                           'real_labels': split_train_target_np.flatten()
+                                           }
 
         boostrap_iter_train_record = pd.DataFrame(data=boostrap_iter_train_record_dict)
         boostrap_iter_train_record.to_csv(args.record + '/bootstrap_iter_train_' +
                                           str(boostrap_iter) + '_labels.csv', index=None)
 
-        boostrap_iter_val_record_dict = {'val_labels': val_best_preds.cpu().numpy().flatten(),
-                                           'real_labels': split_val_target_np.flatten()}
+        boostrap_iter_val_record_dict = {'val_indexs': val_slice,
+                                        'val_labels': val_best_preds.cpu().numpy().flatten(),
+                                        'real_labels': split_val_target_np.flatten()
+                                         }
 
         boostrap_iter_val_record = pd.DataFrame(data=boostrap_iter_val_record_dict)
         boostrap_iter_val_record.to_csv(args.record + '/bootstrap_iter_val_' +
                                           str(boostrap_iter) + '_labels.csv', index=None)
 
         bootstrap_test_preds = torch.cat([bootstrap_test_preds, test_best_preds], dim=-1)
+
+    bootstrap_test_acc1_dict_df = pd.DataFrame(data=bootstrap_test_acc1_dicts)
+    bootstrap_test_acc1_dict_df.to_csv(args.record + '/bootstrap_iter_test_acc1.csv', index=None)
 
     boostrap_iter_test_record = pd.DataFrame(data=bootstrap_test_preds.cpu().numpy())
     boostrap_iter_test_record.to_csv(args.record + '/bootstrap_iter_test_labels.csv', index=None)
