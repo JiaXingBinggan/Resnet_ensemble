@@ -160,10 +160,11 @@ if __name__ == '__main__':
     print('max acc1', max_acc1)
 
     boostrap_iter_test_labels = pd.read_csv(args.record + '/bootstrap_iter_test_labels.csv')
-    print(np.array(list(map(lambda x: sorted(x)[len(x) // 2], boostrap_iter_test_labels.values))).reshape(-1, 1))
+
     boostrap_iter_test_labels.mode(axis=1).to_csv(args.record + '/test.csv', index=None)
 
-    vote_preds = torch.LongTensor(np.array(list(map(lambda x: sorted(x)[len(x) // 2], boostrap_iter_test_labels.values))).reshape(-1, 1))
+    vote_preds = torch.LongTensor(np.array(list(map(lambda x: sorted(x)[len(x) // 2],
+                                                    boostrap_iter_test_labels.values))).reshape(-1, 1))
     vote_targets = torch.LongTensor(test_target_np)
     acc1, preds = accuracy(vote_preds, vote_targets, topk=(1,))
     print('vote acc1', acc1[0].item())

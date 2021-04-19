@@ -175,50 +175,47 @@ if __name__ == '__main__':
 
     boostrap_iter_test_labels = pd.read_csv(args.record + '/bootstrap_iter_test_labels.csv')
     max_acc1_preds = pd.read_csv(args.record + '/vote_preds.csv', dtype=int)
-    # max_acc1_preds = boostrap_iter_test_labels.iloc[:, max_acc1_index]
 
+    ensemble_n = Config.split_nums #
+    ensemble_n_indexs = list(range(Config.split_nums))
+    ensemble_n_len = len(ensemble_n_indexs)
+    ensemble_n_test_labels = boostrap_iter_test_labels.iloc[:, ensemble_n_indexs]
+    ensemble_n_test_labels.columns = list(range(ensemble_n_len))
 
-    # pearsonr_n = 5
-    # origin_indexs = [j for j in range(Config.split_nums) if j != max_acc1_index] # except the index for max acc1
-    # ensemble_lists = pearson_diff(pearsonr_n, origin_indexs, max_acc1_index, max_acc1_preds, boostrap_iter_test_labels)
-    #
-    # merges = boostrap_iter_test_labels.iloc[:, ensemble_lists]
-    # vote_preds = torch.LongTensor(merges.mode(axis=1).values[:, 0])
-    # vote_targets = torch.LongTensor(test_target_np)
-    # acc1, preds = accuracy(vote_preds, vote_targets, topk=(1,))
-    # print('ensemble acc1', acc1[0].item())
-    #
-    # current_acc1 = max_acc1
-    # while current_acc1 >= max_acc1:
-    top_n = 16
-    # top_n_indexs = list(np.argsort(-bootstrap_test_acc1s)[1: top_n + 1])
-    top_n_indexs = list(range(Config.split_nums))
-    top_n_len = len(top_n_indexs)
-    top_n_test_labels = boostrap_iter_test_labels.iloc[:, top_n_indexs]
-    top_n_test_labels.columns = list(range(top_n_len))
+    iter_ensemble_n = 15 #
+    drop_ensemble_n = 2 #
 
     current_acc1 = max_acc1
     while current_acc1 >= max_acc1:
         max_acc1 = current_acc1
         pearsonr_x_ys = []
-        for i in range(top_n_len):
+        for i in range(ensemble_n_len):
             # pearsonr_x_ys.append([i, pdist([max_acc1_preds.values.flatten(),
-            #                                   top_n_test_labels.iloc[:, i].values], 'cosine')])
+            #                                   ensemble_n_test_labels.iloc[:, i].values], 'cosine')]) #
             pearsonr_x_ys.append([i, pearsonr(max_acc1_preds.values.flatten(),
-                                            top_n_test_labels.iloc[:, i].values)[0]])
+                                            ensemble_n_test_labels.iloc[:, i].values)[0]]) #
 
         sort_pearsonr_x_ys = np.array(sorted(pearsonr_x_ys, key=lambda x: x[1])).astype(int)
-        max_diff_index = list(sort_pearsonr_x_ys[:top_n][:, 0])
+        max_diff_index = list(sort_pearsonr_x_ys[:iter_ensemble_n, 0])
+        all_diff_index = list(sort_pearsonr_x_ys[:, 0])
 
-        merges = pd.concat([max_acc1_preds, top_n_test_labels.iloc[:, max_diff_index]], axis=1)
-        vote_preds = torch.LongTensor(np.array(list(map(lambda x: sorted(x)[len(x) // 2], merges.values))).reshape(-1, 1))
+        merges = pd.concat([max_acc1_preds, ensemble_n_test_labels.iloc[:, max_diff_index]], axis=1)
+        merge_votes = np.array(list(map(lambda x: np.argmax(np.bincount(x)), merges.values)))
+        vote_preds = torch.LongTensor(merge_votes.reshape(-1, 1))
         vote_targets = torch.LongTensor(test_target_np)
         acc1, preds = accuracy(vote_preds, vote_targets, topk=(1,))
+
+        if acc1[0].item() < max_acc1: #
+            break
+
         print('ensemble acc1', acc1[0].item())
 
-        max_acc1_preds = pd.DataFrame(data=np.array(list(map(lambda x: sorted(x)[len(x) // 2], merges.values))))
+        max_acc1_preds = pd.DataFrame(data=merge_votes)
+        max_acc1_preds.to_csv(args.record + '/ensemble_preds.csv', index=None)
 
         current_acc1 = acc1[0].item()
-        top_n_test_labels = top_n_test_labels.drop(max_diff_index, axis=1)
-        top_n_len -= len(max_diff_index)
-        top_n_test_labels.columns = list(range(top_n_len))
+        ensemble_n_test_labels = ensemble_n_test_labels.drop(all_diff_index[:drop_ensemble_n], axis=1)
+        ensemble_n_len -= drop_ensemble_n
+        ensemble_n_test_labels.columns = list(range(ensemble_n_len))
+
+

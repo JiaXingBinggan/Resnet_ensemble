@@ -208,16 +208,16 @@ if __name__ == '__main__':
             #                                               top_n_test_labels.iloc[:, i].values], 'cosine')])
 
         sort_pearsonr_x_ys = np.array(sorted(pearsonr_x_ys, key=lambda x: x[1])).astype(int)
-        max_diff_index = list(sort_pearsonr_x_ys[:1][:, 0])
+        max_diff_index = list(sort_pearsonr_x_ys[:2][:, 0])
 
         merges = pd.concat([max_acc1_preds, top_n_test_labels.iloc[:, max_diff_index]], axis=1)
-        vote_preds = torch.LongTensor(np.array(list(map(lambda x: sorted(x)[len(x) // 2], merges.values))).reshape(-1, 1))
+        vote_preds = torch.LongTensor(np.array(list(map(lambda x: np.argmax(np.bincount(x)), merges.values))).reshape(-1, 1))
         # vote_preds = torch.LongTensor(merges.mode(axis=1).values[:, 0])
         vote_targets = torch.LongTensor(test_target_np)
         acc1, preds = accuracy(vote_preds, vote_targets, topk=(1,))
         print('ensemble acc1', acc1[0].item())
 
-        max_acc1_preds = pd.DataFrame(data=np.array(list(map(lambda x: sorted(x)[len(x) // 2], merges.values))))
+        max_acc1_preds = pd.DataFrame(data=np.array(list(map(lambda x: np.argmax(np.bincount(x)), merges.values))))
 
 
         current_acc1 = acc1[0].item()
