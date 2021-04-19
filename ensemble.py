@@ -201,6 +201,7 @@ if __name__ == '__main__':
 
         merges = pd.concat([max_acc1_preds, ensemble_n_test_labels.iloc[:, max_diff_index]], axis=1)
         merge_votes = np.array(list(map(lambda x: np.argmax(np.bincount(x)), merges.values)))
+
         vote_preds = torch.LongTensor(merge_votes.reshape(-1, 1))
         vote_targets = torch.LongTensor(test_target_np)
         acc1, preds = accuracy(vote_preds, vote_targets, topk=(1,))
